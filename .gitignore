@@ -43,3 +43,9 @@ crashlytics-build.properties
 
 # Unity packages
 *.unitypackage
+
+# Submission artefacts (kept on disk, shipped as the upload, not as source)
+/deliverable/Build_Linux_x86_64/
+/deliverable/*.pdf
+/deliverable/Captures/
+*.zip
