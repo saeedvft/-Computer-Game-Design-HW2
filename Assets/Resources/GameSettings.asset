@@ -1,0 +1,70 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4a193e80741fb5e78bc5a91dd7d11d0, type: 3}
+  m_Name: GameSettings
+  m_EditorClassIdentifier: Assembly-CSharp::HW2.GameSettings
+  laneCount: 3
+  laneWidth: 3.5
+  roadWidth: 11.5
+  segmentLength: 60
+  segmentCount: 9
+  recycleBehindPlayer: 20
+  drivePastPlayerZ: -16
+  baseSpeed: 13
+  maxSpeed: 46
+  speedAcceleration: 5
+  difficultyRampDistance: 2800
+  scorePerMeter: 1
+  maxLives: 3
+  laneChangeSeconds: 0.24
+  laneRepeatSeconds: 0.2
+  invulnerableSeconds: 1.3
+  laneChangeTiltDegrees: 7
+  fuelMax: 100
+  fuelBurnPerSecond: 2.9
+  fuelBurnSpeedCoefficient: 0.022
+  fuelPerCan: 42
+  fuelSpacingMeters: 380
+  rowsPerSegment: 3
+  obstacleChanceAtStart: 0.55
+  obstacleChanceAtMax: 0.96
+  doubleBlockChanceAtStart: 0.05
+  doubleBlockChanceAtMax: 0.55
+  movingCarShare: 0.45
+  movingCarCruiseFactor: 0.42
+  coinRowChance: 0.6
+  coinsPerRow: 4
+  coinSpacing: 4.4
+  coinValue: 50
+  collectibleY: 1.05
+  neonColor: {r: 0.15, g: 1, b: 0.95, a: 1}
+  neonMinIntensity: 1.1
+  neonMaxIntensity: 8.5
+  neonMinGlow: 0.9
+  neonMaxGlow: 7
+  headlightColor: {r: 1, g: 0.95, b: 0.8, a: 1}
+  streetlightSpacing: 20
+  fireworksMinInterval: 1.3
+  fireworksMaxInterval: 3.9
+  rocketMinFuse: 1.05
+  rocketMaxFuse: 1.75
+  headlightBeam: {r: 1, g: 0.97, b: 0.85, a: 1}
+  roadSegmentPrefab: {fileID: 4389912194865414922, guid: 52d0e3a468cd138e6834e4d0aaab09f2, type: 3}
+  playerCarPrefab: {fileID: 7341344272608789482, guid: a0ff7c6c48752f8a48083a2cc4f7c609, type: 3}
+  staticObstaclePrefab: {fileID: 1858683815846133556, guid: 3bf66405fa43f4818b00c625d47acb87, type: 3}
+  movingObstaclePrefab: {fileID: 611001475363423867, guid: 62f855c3aedc0eb849b6cfef5bd8ee00, type: 3}
+  coinPrefab: {fileID: 6589216741653065104, guid: 883b994e4346e755f959a8ff81d7553e, type: 3}
+  fuelCanPrefab: {fileID: 6201092362746249727, guid: cc2374b40d22e799fb7c87e71bc1c1e3, type: 3}
+  fireworkRocketPrefab: {fileID: 6623868553604138858, guid: a073f4b4b5d7fbf9faf34934572a41fc, type: 3}
+  fireworkBurstPrefab: {fileID: 773109562834829120, guid: 83349776c0cad6947901af74d8b89321, type: 3}
+  impactSparksPrefab: {fileID: 4432138848013737236, guid: aa5c8e14d89cab046909d594afa571b0, type: 3}
+  pickupBurstPrefab: {fileID: 2486324976700260228, guid: f6e70610d78d2ef9ea6fd80d3c0f9fd6, type: 3}
