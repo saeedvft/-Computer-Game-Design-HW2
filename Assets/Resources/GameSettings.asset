@@ -33,7 +33,8 @@ MonoBehaviour:
   fuelBurnPerSecond: 2.9
   fuelBurnSpeedCoefficient: 0.022
   fuelPerCan: 42
-  fuelSpacingMeters: 380
+  fuelFirstDistance: 150
+  fuelSpacingMeters: 240
   rowsPerSegment: 3
   obstacleChanceAtStart: 0.55
   obstacleChanceAtMax: 0.96

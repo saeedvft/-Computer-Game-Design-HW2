@@ -18,11 +18,13 @@ namespace HW2.EditorTools
         const string ParticleShader = "Universal Render Pipeline/Particles/Unlit";
         const string SkyShader = "Skybox/Procedural";
         const string PanelSpriteName = "S_Rounded";
+        const string BarSpriteName = "S_Bar";
 
         static readonly Dictionary<string, Material> materials = new();
 
         /// <summary>Rounded panel sprite shared by every UI background and button.</summary>
         public static Sprite Panel { get; private set; }
+        public static Sprite Bar { get; private set; }
 
         // ---------------------------------------------------------------- palette
 
@@ -46,6 +48,7 @@ namespace HW2.EditorTools
         static readonly Color Headlight = new(1f, 0.96f, 0.85f);
         static readonly Color Taillight = new(1f, 0.12f, 0.08f);
         static readonly Color LanePaint = new(1f, 0.93f, 0.66f);
+        static readonly Color Dirt = new(0.022f, 0.024f, 0.038f);
 
         // ---------------------------------------------------------------- entry point
 
@@ -65,6 +68,7 @@ namespace HW2.EditorTools
             Lit("M_Asphalt", Asphalt, 0f, 0.64f, null, asphalt, new Vector2(6f, 22f));
             Lit("M_Shoulder", Shoulder, 0f, 0.35f);
             Lit("M_Concrete", Concrete, 0f, 0.42f);
+            Lit("M_Dirt", Dirt, 0f, 0.12f);
             Lit("M_Guardrail", Steel, 0.85f, 0.58f);
             Lit("M_Pole", Pole, 0.6f, 0.45f);
             Lit("M_Tire", Tire, 0f, 0.28f);
@@ -102,6 +106,7 @@ namespace HW2.EditorTools
             Particle("P_Glow", Color.white, true, soft);
 
             Panel = RoundedSprite();
+            Bar = BarSprite();
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
@@ -558,6 +563,54 @@ namespace HW2.EditorTools
             importer.spritePixelsPerUnit = 100f;
             importer.spriteBorder = new Vector4(border, border, border, border);
             importer.alphaIsTransparency = true;
+            importer.mipmapEnabled = false;
+            importer.filterMode = FilterMode.Bilinear;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.SaveAndReimport();
+
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            if (sprite == null)
+            {
+                Debug.LogError($"Could not import the UI sprite at '{path}'.");
+            }
+
+            return sprite;
+        }
+
+        /// <summary>
+        /// Borderless opaque quad for gauge fills. Image.type Filled insets its geometry by the sprite
+        /// border, so only a zero-border sprite makes the drawn length equal to fillAmount.
+        /// </summary>
+        static Sprite BarSprite()
+        {
+            const int size = 16;
+
+            string path = $"{TextureFolder}/{BarSpriteName}.png";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) != null)
+            {
+                AssetDatabase.DeleteAsset(path);
+            }
+
+            Texture2D tex = new(size, size, TextureFormat.RGBA32, false) { name = BarSpriteName };
+            Color[] pixels = new Color[size * size];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                pixels[i] = Color.white;
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply();
+            byte[] png = tex.EncodeToPNG();
+            Object.DestroyImmediate(tex);
+            System.IO.File.WriteAllBytes(System.IO.Path.Combine(GetProjectPath(), path), png);
+            AssetDatabase.ImportAsset(path);
+
+            TextureImporter importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = 100f;
+            importer.spriteBorder = Vector4.zero;
+            importer.alphaIsTransparency = false;
             importer.mipmapEnabled = false;
             importer.filterMode = FilterMode.Bilinear;
             importer.wrapMode = TextureWrapMode.Clamp;

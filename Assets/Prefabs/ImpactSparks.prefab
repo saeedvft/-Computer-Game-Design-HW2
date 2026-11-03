@@ -2329,7 +2329,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2346673802100351088}
-  - component: {fileID: 7219608849336843152}
+  - component: {fileID: 6714197213699426523}
   m_Layer: 0
   m_Name: ImpactSparks
   m_TagString: Untagged
@@ -2355,7 +2355,7 @@ Transform:
   - {fileID: 254070543379438853}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &7219608849336843152
+--- !u!114 &6714197213699426523
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

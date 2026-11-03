@@ -359,11 +359,17 @@ namespace HW2.EditorTools
             RectTransform track = Node(fuelPanel, "Track");
             Stretch(track, new Vector2(16f, 16f), new Vector2(-16f, -40f), PanelColor);
             Image fill = Solid(Node(track, "Fill"), SpriteKind.Rounded, Accent);
+
+            // Image ignores the Filled geometry entirely without a sprite, and a 9-slice sprite would
+            // inset the fill by its own border, so the gauge uses a borderless quad: the drawn length
+            // is then exactly fillAmount of the track.
+            fill.sprite = Hw2Assets.Bar;
+
             RectTransform fillRect = (RectTransform)fill.transform;
             fillRect.anchorMin = Vector2.zero;
             fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = new Vector2(6f, 6f);
-            fillRect.offsetMax = new Vector2(-6f, -6f);
+            fillRect.offsetMin = new Vector2(8f, 8f);
+            fillRect.offsetMax = new Vector2(-8f, -8f);
             fill.type = Image.Type.Filled;
             fill.fillMethod = Image.FillMethod.Horizontal;
             fill.fillOrigin = (int)Image.OriginHorizontal.Left;

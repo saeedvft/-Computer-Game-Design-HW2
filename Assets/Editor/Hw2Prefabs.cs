@@ -437,6 +437,18 @@ namespace HW2.EditorTools
                 Box(lamp, "Head", new Vector3(-side * 1.45f, 7.08f, 0f), new Vector3(0.6f, 0.16f, 0.36f), Hw2Assets.Get("M_Lamp"));
             }
 
+            // The city blocks reach out to |x| = 31.25, so the segments need land for them to stand on:
+            // a dirt verge past the shoulder plus a pavement strip the buildings are set back from.
+            for (int side = -1; side <= 1; side += 2)
+            {
+                Box(go.transform, $"Ground_{(side > 0 ? "R" : "L")}",
+                    new Vector3(side * 28.5f, -0.63f, mid), new Vector3(58f, 1.1f, SegmentLength),
+                    Hw2Assets.Get("M_Dirt"));
+                Box(go.transform, $"Sidewalk_{(side > 0 ? "R" : "L")}",
+                    new Vector3(side * 18.125f, -0.22f, mid), new Vector3(7.75f, 0.4f, SegmentLength),
+                    Hw2Assets.Get("M_Concrete"));
+            }
+
             // Skyline blocks with lit windows, further out on both sides.
             float[] offsets = { 15f, 21.5f, 28f };
             float[] heights = { 11f, 22f, 16f };

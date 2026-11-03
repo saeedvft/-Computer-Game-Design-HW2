@@ -4612,10 +4612,10 @@ GameObject:
   - component: {fileID: 1292671146926648151}
   - component: {fileID: 4859863247916520759}
   - component: {fileID: 541643737385525928}
-  - component: {fileID: 5696419995327265013}
-  - component: {fileID: 3294562737642712295}
+  - component: {fileID: 4861684336880888226}
+  - component: {fileID: 8952665368122906563}
   - component: {fileID: 7043498475611679257}
-  - component: {fileID: 5628426318399122266}
+  - component: {fileID: 1257428569129972650}
   m_Layer: 0
   m_Name: PlayerCar
   m_TagString: Untagged
@@ -4687,7 +4687,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &5696419995327265013
+--- !u!114 &4861684336880888226
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -4700,7 +4700,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HW2.WheelSpinner
   wheelRadius: 0.42
---- !u!114 &3294562737642712295
+--- !u!114 &8952665368122906563
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -4817,7 +4817,7 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
---- !u!114 &5628426318399122266
+--- !u!114 &1257428569129972650
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

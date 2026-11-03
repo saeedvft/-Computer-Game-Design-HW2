@@ -26,7 +26,11 @@ namespace HW2
 
         public void ResetState()
         {
-            lastFuelDistance = GameManager.Instance != null ? GameManager.Instance.Distance : 0f;
+            GameManager gm = GameManager.Instance;
+            float distance = gm != null ? gm.Distance : 0f;
+
+            // Offset the counter so the first can is laid out for the opening stretch of the run.
+            lastFuelDistance = distance + settings.fuelFirstDistance - settings.fuelSpacingMeters;
         }
 
         public void Populate(RoadSegment segment)
@@ -44,7 +48,6 @@ namespace HW2
             int rows = Mathf.Max(1, settings.rowsPerSegment);
             float rowGap = segment.Length / rows;
             int freeLane = Random.Range(0, laneCount);
-            bool placeFuel = distance - lastFuelDistance >= settings.fuelSpacingMeters;
 
             for (int row = 0; row < rows; row++)
             {
@@ -72,11 +75,15 @@ namespace HW2
                     SpawnObstacle(lane, z);
                 }
 
-                bool fuelRow = placeFuel && row == rows / 2;
-                if (fuelRow)
+                // A row is laid out while it is still the whole road window away, so the fuel
+                // cadence has to be measured from the distance the player will have travelled
+                // when it arrives - not from the distance now.
+                float arrivalDistance = distance + z;
+
+                if (arrivalDistance - lastFuelDistance >= settings.fuelSpacingMeters)
                 {
                     SpawnFuelCan(freeLane, z);
-                    lastFuelDistance = distance;
+                    lastFuelDistance = arrivalDistance;
                 }
                 else if (Random.value < settings.coinRowChance)
                 {

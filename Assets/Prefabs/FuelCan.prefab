@@ -371,7 +371,7 @@ GameObject:
   - component: {fileID: 6704180203468276018}
   - component: {fileID: 5973726033833307319}
   - component: {fileID: 8459619498683933651}
-  - component: {fileID: 1658664035373220581}
+  - component: {fileID: 4928737897980888804}
   m_Layer: 0
   m_Name: FuelCan
   m_TagString: Untagged
@@ -447,7 +447,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &1658664035373220581
+--- !u!114 &4928737897980888804
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

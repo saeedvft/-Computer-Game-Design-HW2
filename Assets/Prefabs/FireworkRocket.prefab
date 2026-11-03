@@ -2397,7 +2397,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7182044982208234192}
-  - component: {fileID: 5448862157228060301}
+  - component: {fileID: 3644300779682793846}
   m_Layer: 0
   m_Name: FireworkRocket
   m_TagString: Untagged
@@ -2422,7 +2422,7 @@ Transform:
   - {fileID: 6870831759121115454}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &5448862157228060301
+--- !u!114 &3644300779682793846
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

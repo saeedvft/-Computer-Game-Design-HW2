@@ -21,7 +21,7 @@ namespace HW2
         [SerializeField] string speedPath = "HUD/SpeedPanel/SpeedValue";
         [SerializeField] string scorePath = "HUD/ScorePanel/ScoreValue";
         [SerializeField] string bestPath = "HUD/ScorePanel/BestValue";
-        [SerializeField] string fuelFillPath = "HUD/FuelPanel/Fill";
+        [SerializeField] string fuelFillPath = "HUD/FuelPanel/Track/Fill";
         [SerializeField] string livesPath = "HUD/LifePanel/Lives";
         [SerializeField] string damageFlashPath = "HUD/DamageFlash";
 
@@ -412,19 +412,20 @@ namespace HW2
 
         TMP_Text FindText(string path)
         {
-            TMP_Text text = FindComponent<TMP_Text>(path);
-            if (text == null)
-            {
-                Debug.LogError($"UI text '{path}' not found on {name}.", this);
-            }
-
-            return text;
+            return FindComponent<TMP_Text>(path);
         }
 
+        /// <summary>A path that does not resolve is a silent HUD outage otherwise, so it is reported here.</summary>
         T FindComponent<T>(string path) where T : Component
         {
             Transform found = transform.Find(path);
-            return found != null ? found.GetComponent<T>() : null;
+            if (found == null)
+            {
+                Debug.LogError($"UI component '{path}' ({typeof(T).Name}) not found on {name}.", this);
+                return null;
+            }
+
+            return found.GetComponent<T>();
         }
     }
 }

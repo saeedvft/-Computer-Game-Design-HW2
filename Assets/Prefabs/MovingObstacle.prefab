@@ -281,8 +281,8 @@ GameObject:
   - component: {fileID: 6197583955170358731}
   - component: {fileID: 4360980897203105264}
   - component: {fileID: 406973654061762995}
-  - component: {fileID: 5030564379679187777}
-  - component: {fileID: 6768768561119798267}
+  - component: {fileID: 406254634277138242}
+  - component: {fileID: 7781418613116813656}
   m_Layer: 0
   m_Name: MovingObstacle
   m_TagString: Untagged
@@ -364,7 +364,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &5030564379679187777
+--- !u!114 &406254634277138242
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -377,7 +377,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HW2.WheelSpinner
   wheelRadius: 0.42
---- !u!114 &6768768561119798267
+--- !u!114 &7781418613116813656
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}

@@ -76,7 +76,8 @@ namespace HW2
         public float fuelBurnPerSecond = 2.9f;
         public float fuelBurnSpeedCoefficient = 0.022f;
         public float fuelPerCan = 42f;
-        public float fuelSpacingMeters = 380f;
+        public float fuelFirstDistance = 150f;
+        public float fuelSpacingMeters = 240f;
 
         [Header("Obstacle spawning")]
         public int rowsPerSegment = 3;

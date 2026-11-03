@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 3992787859227684196}
   - component: {fileID: 9201678803351978435}
   - component: {fileID: 416019767145618199}
-  - component: {fileID: 4641946914640479368}
+  - component: {fileID: 1343704782207630917}
   m_Layer: 0
   m_Name: StaticObstacle
   m_TagString: Untagged
@@ -92,7 +92,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &4641946914640479368
+--- !u!114 &1343704782207630917
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
