@@ -1,3 +1,6 @@
+using System;
+using System.Reflection;
+using Object = UnityEngine.Object;
 using TMPro;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -11,6 +14,8 @@ using UnityEngine.UI;
 
 namespace HW2.EditorTools
 {
+    using static Hw2UiStyle;
+
     /// <summary>
     /// Builds the whole playable scene from code: materials, textures, prefabs, the settings
     /// asset, lighting, post-processing and the complete UI. Everything is deterministic, so the
@@ -24,18 +29,13 @@ namespace HW2.EditorTools
         const string ProfilePath = "Assets/Settings/Hw2PostFX.asset";
         const string InputActionsPath = "Assets/Resources/GameInput.inputactions";
 
-        static readonly Color PanelColor = new(0.035f, 0.05f, 0.09f, 0.78f);
-        static readonly Color Accent = new(0.2f, 0.95f, 0.9f, 1f);
-        static readonly Color DimText = new(0.68f, 0.74f, 0.86f, 1f);
-        static readonly Color BrightText = new(0.96f, 0.98f, 1f, 1f);
-        static readonly Color ButtonColor = new(0.09f, 0.36f, 0.42f, 0.95f);
-
-        // ---------------------------------------------------------------- menu
+        // ---------------------------------------------------------------- UI
 
         [MenuItem("HW2/Build Game (assets + scene)")]
         public static void BuildGame()
         {
             Hw2Assets.BuildAll();
+            Hw2FontImporter.EnsureFonts();
 
             GameSettings settings = LoadOrCreateSettings();
             Hw2Prefabs.BuildAll(settings);
@@ -67,7 +67,8 @@ namespace HW2.EditorTools
                 {
                     if (property.propertyType != SerializedPropertyType.ObjectReference
                         || property.name == "m_Script"
-                        || property.objectReferenceValue != null)
+                        || property.objectReferenceValue != null
+                        || IsOptional(behaviour.GetType(), property.name))
                     {
                         continue;
                     }
@@ -78,6 +79,54 @@ namespace HW2.EditorTools
             }
 
             Debug.Log(problems == 0 ? "HW2: every scene reference is wired." : $"HW2: {problems} empty scene reference(s).");
+        }
+
+        /// <summary>
+        /// <c>UIManager</c> reaches every widget through a path written as a string, and the builder names
+        /// the nodes it looks for. Nothing in the project joins the two, so a rename on one side is a blank
+        /// readout at runtime that only shows up once somebody plays the game. This joins them.
+        /// </summary>
+        [MenuItem("HW2/Verify UI Paths")]
+        public static void VerifyUiPaths()
+        {
+            UIManager ui = Object.FindAnyObjectByType<UIManager>();
+            if (ui == null)
+            {
+                Debug.LogError("HW2: no UIManager in the open scene - build the game first.");
+                return;
+            }
+
+            int missing = 0;
+
+            foreach (FieldInfo field in typeof(UIManager).GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+            {
+                if (field.FieldType != typeof(string) || !field.Name.EndsWith("Path"))
+                {
+                    continue;
+                }
+
+                string path = (string)field.GetValue(ui);
+
+                if (string.IsNullOrEmpty(path) || ui.transform.Find(path) == null)
+                {
+                    missing++;
+                    Debug.LogError($"HW2: UIManager.{field.Name} = '{path}' resolves to nothing under the canvas.", ui);
+                }
+            }
+
+            Debug.Log(missing == 0
+                ? "HW2: every UI path resolves."
+                : $"HW2: {missing} UI path(s) do not resolve.");
+        }
+
+        /// <summary>
+        /// A field the component itself declares optional: the part it points at is not always built, and
+        /// an audit that shouted about every one of them would stop being read.
+        /// </summary>
+        static bool IsOptional(Type type, string fieldName)
+        {
+            FieldInfo field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            return field != null && field.IsDefined(typeof(OptionalReferenceAttribute), false);
         }
 
         // ---------------------------------------------------------------- settings asset
@@ -332,155 +381,242 @@ namespace HW2.EditorTools
         static void BuildHud(Transform root)
         {
             RectTransform hud = Node(root, "HUD");
+            PanelFx(hud, hud);
 
-            // Speed, bottom left. The number grows leftwards from the unit label so a
-            // three digit reading never touches it.
-            RectTransform speedPanel = Panel(hud, "SpeedPanel", new Vector2(0f, 0f), new Vector2(0f, 0f),
-                new Vector2(0f, 0f), new Vector2(250f, 76f), new Vector2(48f, 40f));
-            Text(Node(speedPanel, "SpeedValue"), "0", 58f, BrightText, TextAlignmentOptions.Right,
-                new Vector2(0f, 0.22f), new Vector2(0.7f, 1f), new Vector2(1f, 0.5f), new Vector2(-6f, 0f), true);
-            Text(Node(speedPanel, "Unit"), "KM/H", 20f, Accent, TextAlignmentOptions.Left,
-                new Vector2(0.72f, 0.24f), new Vector2(1f, 0.72f), new Vector2(0f, 0.5f), new Vector2(4f, 0f), true);
+            // Speed, bottom left. The digits come from a monospaced face so a changing reading never
+            // shifts the unit it is measured against. No brackets: those mean "selected", and nothing
+            // in the HUD can be selected.
+            RectTransform speed = Card(hud, "SpeedPanel", LowLeft, new Vector2(300f, 124f), new Vector2(Gut, Gut),
+                UiShape.Cut, Base1);
 
-            // Score, top centre.
-            RectTransform scorePanel = Panel(hud, "ScorePanel", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(0.5f, 1f), new Vector2(460f, 128f), new Vector2(0f, -28f));
-            Text(Node(scorePanel, "ScoreValue"), "0", 62f, BrightText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.42f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
-            Text(Node(scorePanel, "BestValue"), "Best 0", 26f, DimText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0f), new Vector2(1f, 0.42f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
+            Label(Inset(speed, "SpeedValue", new Vector2(Pad_M, 50f), new Vector2(-Pad_M, 0f)), "0", UiFont.MonoBold,
+                T_Num_M, Ink, TextAlignmentOptions.Right);
+            Label(Inset(speed, "Unit", new Vector2(Pad_M, 18f), new Vector2(-Pad_M, -106f)), "KM/H", UiFont.UiBold,
+                T_Micro, CyanDim, TextAlignmentOptions.Right, K_Label);
 
-            // Fuel bar, top left.
-            RectTransform fuelPanel = Panel(hud, "FuelPanel", new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(0f, 1f), new Vector2(430f, 92f), new Vector2(48f, -34f));
-            Text(Node(fuelPanel, "Title"), "FUEL", 24f, DimText, TextAlignmentOptions.Left,
-                new Vector2(0f, 0.55f), new Vector2(1f, 1f), new Vector2(0f, 0.5f), new Vector2(10f, 0f), true);
+            Meter(speed, "SpeedBar", LowLeft, new Vector2(264f, 6f), new Vector2(Pad_M, 8f),
+                Ramp((0f, Cyan), (1f, Magenta)), groove: Base2, smoothing: 7f, warnThreshold: 0f, inset: 0f);
 
-            RectTransform track = Node(fuelPanel, "Track");
-            Stretch(track, new Vector2(16f, 16f), new Vector2(-16f, -40f), PanelColor);
-            Image fill = Solid(Node(track, "Fill"), SpriteKind.Rounded, Accent);
+            // Score, top centre. Bare type over the road with a halo behind it: the one HUD reading that
+            // is worth more than a card around it. Three stacked bands, so the caption cannot land on
+            // the number it labels. Inset takes the bottom edge as an offset from the parent's bottom and
+            // the top edge as an offset from the parent's top, so a band [a,b] of the 168 tall panel is
+            // min.y = a and max.y = b - 168.
+            RectTransform score = Step(hud, "ScorePanel", HighMid, new Vector2(760f, 168f), new Vector2(0f, -Gut));
 
-            // Image ignores the Filled geometry entirely without a sprite, and a 9-slice sprite would
-            // inset the fill by its own border, so the gauge uses a borderless quad: the drawn length
-            // is then exactly fillAmount of the track.
-            fill.sprite = Hw2Assets.Bar;
+            // The halo is sized to the digits, not to the panel, and centred on them: a bloom stretched
+            // across the full 760 is a flat slab with steep edges, which reads as a banner behind the
+            // score rather than as light coming off it.
+            Surface(Inset(score, "ScoreGlow", new Vector2(210f, 12f), new Vector2(-210f, 4f)),
+                UiShape.Bloom, Alpha(Magenta, 0.26f)).gameObject.AddComponent<NeonFlicker>().Wire(seed: 5, humDepth: 0.35f);
 
-            RectTransform fillRect = (RectTransform)fill.transform;
-            fillRect.anchorMin = Vector2.zero;
-            fillRect.anchorMax = Vector2.one;
-            fillRect.offsetMin = new Vector2(8f, 8f);
-            fillRect.offsetMax = new Vector2(-8f, -8f);
-            fill.type = Image.Type.Filled;
-            fill.fillMethod = Image.FillMethod.Horizontal;
-            fill.fillOrigin = (int)Image.OriginHorizontal.Left;
-            fill.fillAmount = 1f;
+            Label(Inset(score, "Caption", new Vector2(0f, 140f), Vector2.zero), "SCORE", UiFont.UiBold,
+                T_Micro, CyanDim, TextAlignmentOptions.Center, K_Label);
 
-            // Lives, top right.
-            RectTransform lifePanel = Panel(hud, "LifePanel", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(1f, 1f), new Vector2(330f, 92f), new Vector2(-48f, -34f));
-            Text(Node(lifePanel, "Title"), "LIVES", 24f, DimText, TextAlignmentOptions.Right,
-                new Vector2(0f, 0.55f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(-10f, 0f), true);
+            RectTransform scoreValue = Inset(score, "ScoreValue", new Vector2(0f, 44f), new Vector2(0f, -28f));
+            Label(scoreValue, "0", UiFont.MonoBold, T_Num_L, Ink, TextAlignmentOptions.Center);
+            scoreValue.gameObject.AddComponent<ReadoutText>();
 
-            RectTransform lives = Node(lifePanel, "Lives");
-            Stretch(lives, new Vector2(-14f, 10f), new Vector2(14f, -46f), Color.clear);
+            Label(Inset(score, "BestValue", new Vector2(0f, 8f), new Vector2(0f, -124f)), "Best 0", UiFont.Mono,
+                T_Micro, InkFaint, TextAlignmentOptions.Center);
+
+            // Fuel, top left.
+            RectTransform fuel = Card(hud, "FuelPanel", HighLeft, new Vector2(470f, 108f), new Vector2(Gut, -Gut),
+                UiShape.Cut, Base1);
+            Label(Inset(fuel, "Caption", new Vector2(Pad_L, 74f), new Vector2(-120f, 0f)), "FUEL", UiFont.UiBold,
+                T_Micro, CyanDim, TextAlignmentOptions.Left, K_Label);
+
+            // The percentage is written by the meter, which is the only thing that knows the smoothed
+            // number it is actually drawing.
+            TMP_Text percent = Label(Inset(fuel, "PercentValue", new Vector2(0f, 70f), new Vector2(-Pad_L, 0f)),
+                "100%", UiFont.MonoBold, T_Btn_M, Cyan, TextAlignmentOptions.Right);
+
+            // Amber sits on a short segment on purpose: mixing Warning into Cyan gives a pale green at
+            // the halfway point, and a gauge that rests in a colour nobody chose is off palette for
+            // most of a run. Full is cyan, empty is magenta, and the amber is only ever passed through.
+            Meter(fuel, "Track", LowLeft, new Vector2(414f, 26f), new Vector2(Pad_L, 30f),
+                Ramp((0f, Magenta), (0.22f, Warning), (0.55f, Cyan), (1f, Cyan)), Base2, percent,
+                warnThreshold: 0.28f);
+
+            // Lives, top right. All three hearts stay in the tree; losing one empties it with a pop.
+            // The card is sized to what it holds: three 32 px hearts at 40 px spacing is 112, and 112 plus
+            // two pads of 28 is the width. A wider card made the readout look like an empty drawer.
+            RectTransform lives = Card(hud, "LifePanel", HighRight, new Vector2(168f, 92f), new Vector2(-Gut, -Gut),
+                UiShape.Cut, Base1);
+            Label(Inset(lives, "Caption", new Vector2(Pad_L, 62f), new Vector2(-Pad_L, 0f)), "LIVES", UiFont.UiBold,
+                T_Micro, CyanDim, TextAlignmentOptions.Right, K_Label);
+
+            // A point anchored box, not an inset. Inset's offsets only describe a band while the anchors
+            // stretch; re-anchored to a corner they become the size itself, and -34 minus 14 is a negative
+            // height that puts the hearts under the card instead of in it.
+            RectTransform hearts = Box(lives, "Lives", LowRight, new Vector2(112f, 44f), new Vector2(-Pad_L, 10f));
+
             for (int i = 0; i < 3; i++)
             {
-                RectTransform heart = Node(lives, "Life" + i);
-                heart.anchorMin = new Vector2(1f, 0f);
-                heart.anchorMax = new Vector2(1f, 1f);
+                RectTransform heart = Box(hearts, "Life" + i, HighRight, new Vector2(32f, 32f), new Vector2(-i * 40f, 0f));
+                heart.anchorMin = new Vector2(1f, 0.5f);
+                heart.anchorMax = new Vector2(1f, 0.5f);
                 heart.pivot = new Vector2(1f, 0.5f);
-                heart.sizeDelta = new Vector2(26f, 26f);
-                heart.anchoredPosition = new Vector2(-i * 34f, 0f);
-                Solid(heart, SpriteKind.Rounded, new Color(Accent.r, Accent.g, Accent.b, 0.92f));
+
+                Surface(heart, UiShape.HeartOutline, Alpha(Cyan, 0.30f));
+                Surface(Inset(heart, "Fill", Vector2.zero, Vector2.zero), UiShape.Heart, Alpha(Cyan, 0.92f));
             }
 
-            // Full screen damage wash, animated by UIManager on every hit.
+            hearts.gameObject.AddComponent<HeartMeter>();
+
+            // The hit: a wash over the frame and a stroke around its edge, on one clock.
             RectTransform flash = Node(hud, "DamageFlash");
-            Stretch(flash, Vector2.zero, Vector2.zero, Color.clear);
-            Image flashImage = Solid(flash, SpriteKind.None, new Color(1f, 0.2f, 0.16f, 0f));
-            flashImage.raycastTarget = false;
+            Image wash = Surface(flash, UiShape.Quad, Alpha(Danger, 0f));
+            Image edge = Surface(Node(flash, "EdgeFlash"), UiShape.Edge, Alpha(Magenta, 0f));
 
-            foreach (Image image in hud.GetComponentsInChildren<Image>(true))
+            flash.gameObject.AddComponent<ScreenFlash>().Wire(new[]
             {
-                image.raycastTarget = false;
-            }
-
-            foreach (TMP_Text text in hud.GetComponentsInChildren<TMP_Text>(true))
-            {
-                text.raycastTarget = false;
-            }
+                new ScreenFlash.Layer { image = wash, color = Danger, strength = 0.55f },
+                new ScreenFlash.Layer { image = edge, color = Magenta, strength = 0.95f },
+            });
         }
 
         static void BuildMenu(Transform root)
         {
             RectTransform menu = Node(root, "Menu");
-            Scrim(menu, new Color(0.004f, 0.01f, 0.03f, 0.72f));
+            Scrim(menu, ScrimMenu);
+            PanelFx(menu, menu);
 
-            RectTransform panel = Panel(menu, "Panel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(680f, 620f), Vector2.zero);
+            const float column = Gut;
 
-            Text(Node(panel, "Title"), "NIGHT RUN", 104f, BrightText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.76f), new Vector2(1f, 0.99f), new Vector2(0.5f, 0.5f), Vector2.zero, true)
-                .outlineColor = Accent;
-            Text(Node(panel, "Subtitle"), "Endless neon highway", 28f, Accent, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.68f), new Vector2(1f, 0.76f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
+            // The old menu was a box in the middle of the screen, which is the most generic layout
+            // available and hides the road it is standing on. This is a poster column instead, set down
+            // the left edge and lit by the same two colours as everything else.
+            StepText(menu, "Kicker", "SECTOR 07 · ENDLESS HIGHWAY", UiFont.UiBold, T_Label, CyanDim,
+                TextAlignmentOptions.Left, MidLeft, new Vector2(720f, 34f), new Vector2(column, 372f), K_Label);
 
-            ButtonRow(Node(panel, "StartButton"), "START", 44f, new Vector2(0.16f, 0.48f), new Vector2(0.84f, 0.62f));
-            ButtonRow(Node(panel, "QuitButton"), "QUIT", 34f, new Vector2(0.24f, 0.28f), new Vector2(0.76f, 0.4f));
+            RectTransform title = Step(menu, "Title", MidLeft, new Vector2(940f, 160f), new Vector2(column - 8f, 234f));
 
-            Text(Node(panel, "BestValue"), "Best  0", 30f, BrightText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.16f), new Vector2(1f, 0.26f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
+            // A radial stretched to the aspect of a title is a band, and a band has edges the eye reads
+            // as a box. The halo is therefore given an explicit size close to the shape of the light it
+            // is faking, not an inset of the text box: two and a half screens wide against the glyph
+            // height, and dim, so the falloff runs over a couple of hundred pixels on both axes.
+            Surface(Step(title, "TitleGlow", MidMid, new Vector2(1040f, 460f), new Vector2(140f, 0f)), UiShape.Bloom,
+                Alpha(Magenta, 0.18f)).gameObject.AddComponent<NeonFlicker>().Wire(seed: 1, humDepth: 0.20f, dropoutFloor: 0.30f);
+            Label(title, "NIGHT RUN", UiFont.Display, T_Display, Ink, TextAlignmentOptions.Left, K_Display)
+                .gameObject.AddComponent<NeonFlicker>().Wire(seed: 1, humDepth: 0.04f, dropoutFloor: 0.90f);
 
-            Caption(Node(panel, "ControlsHint"), "A / D or arrow keys steer   -   Esc pauses", 22f,
-                new Vector2(0f, 0.03f), new Vector2(1f, 0.12f), DimText);
+            Surface(Step(menu, "Rule", MidLeft, new Vector2(420f, Hair), new Vector2(column, 152f)), UiShape.Quad, Cyan);
+            StepText(menu, "Subtitle", "Endless neon highway. Don't run dry.", UiFont.Ui, T_Body, InkSoft,
+                TextAlignmentOptions.Left, MidLeft, new Vector2(760f, 44f), new Vector2(column, 96f));
+
+            PillButton(menu, "StartButton", "START RUN", MidLeft, new Vector2(520f, BtnL), new Vector2(column, 4f),
+                Magenta, InkOnMag, keyHint: "ENTER");
+            GhostButton(menu, "QuitButton", "QUIT", MidLeft, new Vector2(320f, BtnM), new Vector2(column, -106f));
+
+            RectTransform best = Card(menu, "BestChip", HighRight, new Vector2(300f, 112f), new Vector2(-Gut, -Gut),
+                UiShape.Cut, Base1);
+            Labelled(best, "BestValue", "BEST", "0", MidMid, new Vector2(260f, 96f), Vector2.zero,
+                UiFont.MonoBold, T_Num_M, Ink, TextAlignmentOptions.Center, captionColor: CyanDim);
+
+            // One cap for both steering keys: two caps, only one of which has a note, reads as if A does
+            // something on its own.
+            KeyRow(menu, "Keys", LowMid, new Vector2(0f, 40f),
+                ("A D", "STEER"), ("ESC", "PAUSE"), ("R", "RESTART"));
         }
 
         static void BuildPause(Transform root)
         {
             RectTransform pause = Node(root, "Pause");
-            Scrim(pause, new Color(0.004f, 0.01f, 0.03f, 0.82f));
+            Scrim(pause, ScrimPause);
 
-            RectTransform panel = Panel(pause, "Panel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(620f, 560f), Vector2.zero);
+            RectTransform card = Card(pause, "Panel", MidMid, new Vector2(780f, 680f), Vector2.zero,
+                UiShape.Cut, Base1, brackets: true);
+            PanelFx(pause, card);
 
-            Text(Node(panel, "Title"), "PAUSED", 84f, BrightText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.72f), new Vector2(1f, 0.95f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
+            Surface(Box(card, "TopRule", HighMid, new Vector2(724f, Hair), new Vector2(0f, -28f)), UiShape.Quad, Cyan);
 
-            ButtonRow(Node(panel, "ResumeButton"), "RESUME", 40f, new Vector2(0.1f, 0.46f), new Vector2(0.9f, 0.62f));
-            ButtonRow(Node(panel, "RestartButton"), "RESTART", 40f, new Vector2(0.1f, 0.26f), new Vector2(0.9f, 0.42f));
-            ButtonRow(Node(panel, "MenuButton"), "MAIN MENU", 40f, new Vector2(0.1f, 0.06f), new Vector2(0.9f, 0.22f));
+            StepText(card, "Kicker", "TIME STOPPED", UiFont.UiBold, T_Label, CyanDim, TextAlignmentOptions.Center,
+                HighMid, new Vector2(520f, 28f), new Vector2(0f, -62f), K_Label);
+
+            RectTransform title = Step(card, "Title", HighMid, new Vector2(720f, 112f), new Vector2(0f, -118f));
+            // Sized to the word, not to the text box: the box is 720 wide and the glyphs 409, and a halo
+            // that fills the box is twice as wide as the light it is supposed to be coming off.
+            Surface(Halo(title, "Glow", new Vector2(409f, 95f)), UiShape.Bloom,
+                Alpha(Cyan, 0.22f)).gameObject.AddComponent<NeonFlicker>().Wire(seed: 2, humDepth: 0.16f, dropoutFloor: 0.42f);
+            Label(title, "PAUSED", UiFont.Display, T_Title, Ink, TextAlignmentOptions.Center, K_Title);
+
+            RectTransform stakes = Step(card, "Stakes", HighMid, new Vector2(560f, 92f), new Vector2(0f, -254f));
+            Labelled(stakes, "ScoreValue", "SCORE", "0", MidLeft, new Vector2(240f, 84f), new Vector2(10f, 0f),
+                UiFont.MonoBold, T_Num_M, Ink, TextAlignmentOptions.Left, captionColor: CyanDim);
+            Labelled(stakes, "BestValue", "BEST", "0", MidRight, new Vector2(240f, 84f), new Vector2(-10f, 0f),
+                UiFont.MonoBold, T_Num_M, Cyan, TextAlignmentOptions.Right, captionColor: CyanDim);
+            Surface(Box(stakes, "Divider", LowMid, new Vector2(2f, 84f), new Vector2(0f, 4f)), UiShape.Quad,
+                Alpha(Cyan, 0.30f));
+
+            PillButton(card, "ResumeButton", "RESUME", HighMid, new Vector2(600f, BtnL), new Vector2(0f, -372f),
+                Magenta, InkOnMag, keyHint: "ESC");
+            GhostButton(card, "RestartButton", "RESTART", HighMid, new Vector2(600f, BtnM), new Vector2(0f, -474f),
+                keyHint: "R");
+            GhostButton(card, "MenuButton", "MAIN MENU", HighMid, new Vector2(420f, BtnS), new Vector2(0f, -552f),
+                captionSize: T_Btn_S);
+
+            KeyRow(card, "Keys", LowMid, new Vector2(0f, 34f), ("ESC", "RESUME"), ("R", "RESTART"));
         }
 
         static void BuildGameOver(Transform root)
         {
             RectTransform over = Node(root, "GameOver");
-            Scrim(over, new Color(0.06f, 0.005f, 0.01f, 0.8f));
+            Scrim(over, ScrimOver);
 
-            RectTransform panel = Panel(over, "Panel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(720f, 640f), Vector2.zero);
+            RectTransform card = Card(over, "Panel", MidMid, new Vector2(820f, 660f), Vector2.zero,
+                UiShape.Cut, Base1, brackets: true);
+            PanelFx(over, card);
 
-            Text(Node(panel, "Title"), "GAME OVER", 92f, new Color(1f, 0.4f, 0.34f), TextAlignmentOptions.Center,
-                new Vector2(0f, 0.76f), new Vector2(1f, 0.98f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
-            Text(Node(panel, "ReasonValue"), "", 30f, DimText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.68f), new Vector2(1f, 0.76f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
-            Text(Node(panel, "ScoreValue"), "Score  0", 54f, BrightText, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.52f), new Vector2(1f, 0.66f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
-            Text(Node(panel, "BestValue"), "Best  0", 36f, Accent, TextAlignmentOptions.Center,
-                new Vector2(0f, 0.4f), new Vector2(1f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
-            Text(Node(panel, "NewRecord"), "NEW RECORD!", 34f, new Color(1f, 0.86f, 0.3f), TextAlignmentOptions.Center,
-                new Vector2(0f, 0.35f), new Vector2(1f, 0.43f), new Vector2(0.5f, 0.5f), Vector2.zero, true);
+            Surface(Box(card, "TopRule", HighMid, new Vector2(764f, Hair), new Vector2(0f, -28f)), UiShape.Quad, Danger);
 
-            ButtonRow(Node(panel, "RestartButton"), "RESTART", 42f, new Vector2(0.12f, 0.19f), new Vector2(0.88f, 0.33f));
-            ButtonRow(Node(panel, "MenuButton"), "MAIN MENU", 34f, new Vector2(0.22f, 0.05f), new Vector2(0.78f, 0.16f));
+            RectTransform title = Step(card, "Title", HighMid, new Vector2(780f, 150f), new Vector2(0f, -70f));
+            // Dropped 60 below the title so the taller halo stays inside the card instead of bleeding
+            // over its top rule.
+            Surface(Halo(title, "Glow", new Vector2(601f, 95f), new Vector2(0f, -60f)), UiShape.Bloom,
+                Alpha(Danger, 0.24f)).gameObject.AddComponent<NeonFlicker>().Wire(seed: 3, humDepth: 0.22f, dropoutFloor: 0.28f);
+            Label(title, "GAME OVER", UiFont.Display, T_Title, Danger, TextAlignmentOptions.Center, K_Title);
+
+            // Lower case, a full sentence: the only part of this screen that speaks rather than shouts.
+            StepText(card, "ReasonValue", string.Empty, UiFont.Ui, T_Body, InkSoft, TextAlignmentOptions.Center,
+                HighMid, new Vector2(720f, 40f), new Vector2(0f, -236f));
+
+            RectTransform result = Step(card, "Result", HighMid, new Vector2(600f, 130f), new Vector2(0f, -290f));
+            TMP_Text overScore = Labelled(result, "ScoreValue", "SCORE", "0", MidLeft, new Vector2(250f, 120f),
+                new Vector2(10f, 0f), UiFont.MonoBold, T_Num_L, Ink, TextAlignmentOptions.Left,
+                captionColor: CyanDim);
+
+            // The score of a run that just ended is worth counting up: the roll gives the number a
+            // length, which is what the run felt like from the inside.
+            overScore.gameObject.AddComponent<ReadoutText>();
+
+            Labelled(result, "BestValue", "BEST", "0", MidRight, new Vector2(250f, 120f), new Vector2(-10f, 0f),
+                UiFont.MonoBold, T_Num_M, Cyan, TextAlignmentOptions.Right, captionColor: CyanDim);
+            Surface(Box(result, "Divider", LowMid, new Vector2(2f, 120f), new Vector2(0f, 5f)), UiShape.Quad,
+                Alpha(Cyan, 0.30f));
+
+            RectTransform record = RecordChip(card, "RecordChip", "NEW RECORD", HighMid, new Vector2(300f, 44f),
+                new Vector2(0f, -420f));
+
+            PillButton(card, "RestartButton", "RESTART", HighMid, new Vector2(600f, BtnL), new Vector2(0f, -486f),
+                Magenta, InkOnMag, keyHint: "R");
+            GhostButton(card, "MenuButton", "MAIN MENU", HighMid, new Vector2(420f, BtnS), new Vector2(0f, -590f),
+                captionSize: T_Btn_S);
         }
 
         // ---------------------------------------------------------------- UI primitives
 
-        enum SpriteKind
-        {
-            None,
-            Rounded
-        }
+        // Anchor corners. A box is placed by its anchor, so these name the nine places a widget can
+        // sit instead of writing the same Vector2 pair at every call site.
+        static readonly Vector2 LowLeft = new(0f, 0f);
+        static readonly Vector2 LowMid = new(0.5f, 0f);
+        static readonly Vector2 LowRight = new(1f, 0f);
+        static readonly Vector2 MidLeft = new(0f, 0.5f);
+        static readonly Vector2 MidMid = new(0.5f, 0.5f);
+        static readonly Vector2 MidRight = new(1f, 0.5f);
+        static readonly Vector2 HighLeft = new(0f, 1f);
+        static readonly Vector2 HighMid = new(0.5f, 1f);
+        static readonly Vector2 HighRight = new(1f, 1f);
 
         static RectTransform Node(Transform parent, string name)
         {
@@ -494,118 +630,395 @@ namespace HW2.EditorTools
             return rect;
         }
 
-        static void Stretch(RectTransform rect, Vector2 min, Vector2 max, Color background)
-        {
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = min;
-            rect.offsetMax = max;
-
-            if (background.a > 0f)
-            {
-                Solid(rect, SpriteKind.Rounded, background);
-            }
-        }
-
-        static Image Solid(RectTransform rect, SpriteKind kind, Color color)
-        {
-            Image image = rect.gameObject.AddComponent<Image>();
-            image.color = color;
-            if (kind == SpriteKind.Rounded)
-            {
-                image.sprite = Hw2Assets.Panel;
-                image.type = Image.Type.Sliced;
-            }
-
-            return image;
-        }
-
-        static RectTransform Panel(Transform parent, string name, Vector2 anchor, Vector2 anchorMax,
-            Vector2 pivot, Vector2 size, Vector2 position)
+        /// <summary>
+        /// A fixed size box at an anchor. The pivot follows the anchor, so the position reads as a
+        /// margin in from that edge and the layout survives a resolution change: 64 in from the left
+        /// is 64 in from the left at 1920 and at 1280.
+        /// </summary>
+        static RectTransform Box(Transform parent, string name, Vector2 anchor, Vector2 size, Vector2 position)
         {
             RectTransform rect = Node(parent, name);
             rect.anchorMin = anchor;
-            rect.anchorMax = anchorMax;
-            rect.pivot = pivot;
+            rect.anchorMax = anchor;
+            rect.pivot = SnappedPivot(anchor);
             rect.sizeDelta = size;
             rect.anchoredPosition = position;
-            Solid(rect, SpriteKind.Rounded, PanelColor);
             return rect;
         }
 
-        static void Scrim(RectTransform root, Color color)
+        static Vector2 SnappedPivot(Vector2 anchor) => new(
+            anchor.x < 0.5f ? 0f : anchor.x > 0.5f ? 1f : 0.5f,
+            anchor.y < 0.5f ? 0f : anchor.y > 0.5f ? 1f : 0.5f);
+
+        /// <summary>A child stretched over its block, inset by the two corners.</summary>
+        static RectTransform Inset(Transform parent, string name, Vector2 min, Vector2 max)
         {
-            RectTransform rect = Node(root, "Scrim");
-            rect.anchorMin = Vector2.zero;
-            rect.anchorMax = Vector2.one;
-            rect.offsetMin = Vector2.zero;
-            rect.offsetMax = Vector2.zero;
-            Solid(rect, SpriteKind.None, color);
+            RectTransform rect = Node(parent, name);
+            rect.offsetMin = min;
+            rect.offsetMax = max;
+            return rect;
         }
 
-        static TMP_Text Text(RectTransform rect, string value, float size, Color color,
-            TextAlignmentOptions alignment, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot,
-            Vector2 position, bool outline)
+        /// <summary>
+        /// A block that arrives with its screen: a box with the CanvasGroup the transition fades.
+        /// Only direct children of a screen's stagger root are collected, so a block's own decoration
+        /// comes in with it rather than on a beat of its own.
+        /// </summary>
+        static RectTransform Step(Transform parent, string name, Vector2 anchor, Vector2 size, Vector2 position)
         {
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = pivot;
-            rect.anchoredPosition = position;
-            rect.sizeDelta = Vector2.zero;
+            RectTransform rect = Box(parent, name, anchor, size, position);
+            rect.gameObject.AddComponent<CanvasGroup>();
+            return rect;
+        }
 
+        /// <summary>
+        /// Draws a shape into a rect. The slice mode comes from the sprite's own border, because a
+        /// bordered sprite stretched is a smeared corner and a borderless one sliced is a no-op, and
+        /// neither is worth trusting a caller to remember.
+        /// </summary>
+        static Image Surface(RectTransform rect, UiShape shape, Color color, bool raycast = false)
+        {
+            Image image = rect.gameObject.AddComponent<Image>();
+            image.color = color;
+            image.raycastTarget = raycast;
+
+            Sprite sprite = Hw2Assets.Ui(shape);
+
+            if (sprite == null)
+            {
+                image.type = Image.Type.Simple;
+                return image;
+            }
+
+            image.sprite = sprite;
+            image.type = sprite.border.sqrMagnitude > 0f ? Image.Type.Sliced : Image.Type.Simple;
+            return image;
+        }
+
+        /// <summary>A card: a shadow standing in for depth, a surface, and corner brackets.</summary>
+        static RectTransform Card(Transform parent, string name, Vector2 anchor, Vector2 size, Vector2 position,
+            UiShape shape, Color fill, bool brackets = false)
+        {
+            RectTransform rect = Step(parent, name, anchor, size, position);
+
+            // A sliced shadow needs at least its own border of room on every side. Give it less and the
+            // gradient is cut off mid falloff at the rect edge, which draws a hard line exactly where the
+            // card used to end. The drop therefore goes downward, into the extra margin, not sideways.
+            float spread = Hw2Assets.Ui(UiShape.Shadow).border.x;
+            Surface(Inset(rect, "Shadow", new Vector2(-spread, -spread - 12f), new Vector2(spread, spread)),
+                UiShape.Shadow, Alpha(Base0, 0.62f));
+            Surface(Inset(rect, "Back", Vector2.zero, Vector2.zero), shape, fill);
+
+            if (brackets)
+            {
+                Surface(Inset(rect, "Brackets", new Vector2(-7f, -7f), new Vector2(7f, 7f)), UiShape.Frame,
+                    Alpha(Cyan, 0.22f));
+            }
+
+            return rect;
+        }
+
+        static TMP_Text Label(RectTransform rect, string value, UiFont font, float pointSize, Color color,
+            TextAlignmentOptions alignment, float tracking = K_None, float outline = 0f)
+        {
             TextMeshProUGUI text = rect.gameObject.AddComponent<TextMeshProUGUI>();
-            text.font = TMP_Settings.defaultFontAsset;
+            text.font = Hw2FontImporter.Get(font);
+
+            // The weight is in the font asset, so synthesis stays off: TMP faking bold on a face that
+            // already has a bold cut gives a heavier, blurrier stroke than the typeface intended.
+            text.fontStyle = FontStyles.Normal;
             text.text = value;
-            text.fontSize = size;
+            text.fontSize = pointSize;
             text.color = color;
             text.alignment = alignment;
+            text.characterSpacing = tracking;
             text.textWrappingMode = TextWrappingModes.NoWrap;
             text.overflowMode = TextOverflowModes.Overflow;
             text.raycastTarget = false;
 
-            if (outline)
+            if (outline > 0f)
             {
-                text.outlineWidth = 0.14f;
-                text.outlineColor = new Color(0f, 0f, 0f, 0.55f);
+                text.outlineWidth = outline;
+                text.outlineColor = new Color(0f, 0f, 0f, 0.35f);
             }
 
             return text;
         }
 
-        static void ButtonRow(RectTransform rect, string caption, float size, Vector2 anchorMin, Vector2 anchorMax)
+        /// <summary>A line of type that is also a block of its screen's stagger.</summary>
+        static TMP_Text StepText(Transform parent, string name, string value, UiFont font, float pointSize,
+            Color color, TextAlignmentOptions alignment, Vector2 anchor, Vector2 size, Vector2 position,
+            float tracking = K_None)
         {
-            rect.anchorMin = anchorMin;
-            rect.anchorMax = anchorMax;
-            rect.pivot = new Vector2(0.5f, 0.5f);
-            rect.offsetMin = new Vector2(20f, 8f);
-            rect.offsetMax = new Vector2(-20f, -8f);
-
-            Image background = Solid(rect, SpriteKind.Rounded, ButtonColor);
-
-            Button button = rect.gameObject.AddComponent<Button>();
-            button.targetGraphic = background;
-            button.transition = Selectable.Transition.ColorTint;
-            ColorBlock colors = button.colors;
-            colors.normalColor = Color.white;
-            colors.highlightedColor = new Color(1.25f, 1.45f, 1.5f, 1f);
-            colors.pressedColor = new Color(0.7f, 0.8f, 0.85f, 1f);
-            colors.selectedColor = new Color(1.25f, 1.45f, 1.5f, 1f);
-            button.colors = colors;
-
-            RectTransform label = Node(rect, "Label");
-            label.anchorMin = Vector2.zero;
-            label.anchorMax = Vector2.one;
-            label.offsetMin = Vector2.zero;
-            label.offsetMax = Vector2.zero;
-            Text(label, caption, size, BrightText, TextAlignmentOptions.Center, Vector2.zero, Vector2.one,
-                new Vector2(0.5f, 0.5f), Vector2.zero, false);
+            return Label(Step(parent, name, anchor, size, position), value, font, pointSize, color, alignment, tracking);
         }
 
-        /// <summary>Plain caption row used for the control hints inside the menu.</summary>
-        static void Caption(RectTransform rect, string value, float size, Vector2 anchorMin, Vector2 anchorMax, Color color)
+        /// <summary>
+        /// A micro caption welded above the value it describes. This replaces the boxed panel label:
+        /// the number is the object, and the word over it says what kind of number it is.
+        /// </summary>
+        /// <summary>
+        /// A micro caption welded above a value, which is the only label idiom used here: the number is
+        /// the thing, the word over it says what it counts. The block has to be at least the caption
+        /// strip plus one and a quarter of the point size tall, or a large number climbs into its own
+        /// caption, which is how "SCORE" ended up printed across "1,080".
+        /// </summary>
+        static TMP_Text Labelled(Transform parent, string name, string caption, string value, Vector2 anchor,
+            Vector2 size, Vector2 position, UiFont font, float pointSize, Color color,
+            TextAlignmentOptions alignment, float tracking = K_None, Color? captionColor = null)
         {
-            Text(rect, value, size, color, TextAlignmentOptions.Center, anchorMin, anchorMax,
-                new Vector2(0.5f, 0.5f), Vector2.zero, false);
+            RectTransform block = Box(parent, name + "Block", anchor, size, position);
+            float strip = T_Micro + 10f;
+
+            Label(Inset(block, "Caption", new Vector2(0f, size.y - strip), Vector2.zero), caption, UiFont.UiBold,
+                T_Micro, captionColor ?? InkFaint, alignment, K_Label);
+
+            // offsetMax is measured from the parent's top edge, so the band under the caption is
+            // [0, size.y - strip] and its max is -strip. A positive strip here grows the box upwards
+            // over the caption instead of downwards, and the number lands on top of its own label.
+            return Label(Inset(block, name, Vector2.zero, new Vector2(0f, -strip)), value, font, pointSize, color,
+                alignment, tracking);
+        }
+
+        /// <summary>
+        /// A radial stretched to the aspect of a wide pill is a band with two steep edges, and the eye
+        /// reads those edges as a box sitting behind the button rather than as light coming off it. The
+        /// halo therefore keeps its own proportions: it grows sideways with the widget, but its height is
+        /// derived from its width, so the falloff runs over a comparable distance on both axes.
+        /// </summary>
+        static RectTransform Halo(RectTransform owner, string name, Vector2 size, Vector2 offset = default)
+        {
+            float width = size.x + 100f;
+            float height = Mathf.Max(width / 2.4f, size.y + 130f);
+
+            return Step(owner, name, MidMid, new Vector2(width, height), offset);
+        }
+
+        /// <summary>A filled pill: the one thing on a screen the player is meant to press.</summary>
+        static Button PillButton(Transform parent, string name, string caption, Vector2 anchor, Vector2 size,
+            Vector2 position, Color fill, Color textColor, float captionSize = T_Btn_L, string keyHint = null)
+        {
+            RectTransform rect = Step(parent, name, anchor, size, position);
+
+            Image halo = Surface(Halo(rect, "Glow", size), UiShape.Bloom, Alpha(Magenta, 0.16f));
+            Image surface = Surface(Inset(rect, "Back", Vector2.zero, Vector2.zero), PillFor(size.y), fill,
+                raycast: true);
+            Label(Inset(rect, "Label", Vector2.zero, Vector2.zero), caption, UiFont.UiBold, captionSize, textColor,
+                TextAlignmentOptions.Center, K_Label);
+
+            return WireButton(rect, surface, halo, keyHint);
+        }
+
+        /// <summary>An outlined pill: a thing the player can press, but is not being told to press.</summary>
+        static Button GhostButton(Transform parent, string name, string caption, Vector2 anchor, Vector2 size,
+            Vector2 position, float captionSize = T_Btn_M, string keyHint = null)
+        {
+            RectTransform rect = Step(parent, name, anchor, size, position);
+
+            Image halo = Surface(Halo(rect, "Glow", size), UiShape.Bloom, Alpha(Cyan, 0.10f));
+            Surface(Inset(rect, "Fill", Vector2.zero, Vector2.zero), PillFor(size.y), Alpha(Base1, 0.72f));
+            Image surface = Surface(Inset(rect, "Edge", Vector2.zero, Vector2.zero),
+                size.y >= 56f ? UiShape.OutlineM : UiShape.OutlineS, Alpha(InkSoft, 0.50f), raycast: true);
+            Label(Inset(rect, "Label", Vector2.zero, Vector2.zero), caption, UiFont.UiBold, captionSize, InkSoft,
+                TextAlignmentOptions.Center, K_Label);
+
+            return WireButton(rect, surface, halo, keyHint);
+        }
+
+        /// <summary>
+        /// The three surfaces a button is made of, handed to the component that animates them, plus the
+        /// brackets that say "this one is selected" without changing what the button looks like.
+        /// </summary>
+        static Button WireButton(RectTransform rect, Image surface, Image halo, string keyHint)
+        {
+            // Cyan, always, rather than the button's own accent: magenta brackets around a magenta pill
+            // are invisible, and the brackets are the only thing that says "this one is selected".
+            Image frame = Surface(Inset(rect, "Focus", new Vector2(-9f, -9f), new Vector2(9f, 9f)), UiShape.Frame,
+                Alpha(Cyan, 0.95f));
+
+            Button button = rect.gameObject.AddComponent<Button>();
+            button.targetGraphic = surface;
+            button.transition = Selectable.Transition.None;
+
+            rect.gameObject.AddComponent<NeonButton>().Wire(surface, halo, frame);
+
+            if (!string.IsNullOrEmpty(keyHint))
+            {
+                // A cap, not a glyph: the arrows and Escape keys have no characters in any of the three
+                // faces, and a tofu box in a menu is worse than no hint at all.
+                float width = 26f + keyHint.Length * 15f;
+
+                // Inside the pill, and dark against it. A chip floating off the edge reads as a second
+                // button, and a light cap on a light pill reads as nothing at all. The same two colours
+                // work on a filled and an outlined button, so the hint is not a parameter.
+                KeyChip(rect, "Hint", keyHint, MidRight, new Vector2(width, 40f), new Vector2(-18f, 0f),
+                    Alpha(Base0, 0.55f), Ink);
+            }
+
+            return button;
+        }
+
+        /// <summary>A key cap and the word for what it does.</summary>
+        static RectTransform KeyChip(Transform parent, string name, string key, Vector2 anchor, Vector2 size,
+            Vector2 position, Color cap, Color text)
+        {
+            RectTransform rect = Box(parent, name, anchor, size, position);
+            Surface(rect, UiShape.Key, cap);
+            Label(Inset(rect, "Label", Vector2.zero, Vector2.zero), key, UiFont.UiBold, T_Btn_S, text,
+                TextAlignmentOptions.Center, K_Label);
+            return rect;
+        }
+
+        /// <summary>
+        /// A row of key caps, laid out by hand from measured widths. A layout group would mark the
+        /// canvas dirty on every frame of the stagger that brings the screen in, and the transition is
+        /// the one thing here that must not stutter.
+        /// </summary>
+        static RectTransform KeyRow(Transform parent, string name, Vector2 anchor, Vector2 position,
+            params (string Key, string Note)[] keys)
+        {
+            const float capHeight = 40f;
+            const float capPad = 26f;
+            const float keyWidth = 15f;
+            const float noteWidth = 10.5f;
+            const float join = 10f;
+            const float space = 26f;
+
+            float[] cap = new float[keys.Length];
+            float[] note = new float[keys.Length];
+            float total = 0f;
+
+            for (int i = 0; i < keys.Length; i++)
+            {
+                cap[i] = capPad + keys[i].Key.Length * keyWidth;
+                note[i] = keys[i].Note.Length > 0 ? keys[i].Note.Length * noteWidth : 0f;
+                total += cap[i] + (note[i] > 0f ? join + note[i] : 0f) + space;
+            }
+
+            total -= space;
+
+            RectTransform row = Step(parent, name, anchor, new Vector2(total, capHeight), position);
+            float x = 0f;
+
+            for (int i = 0; i < keys.Length; i++)
+            {
+                KeyChip(row, "Key" + i, keys[i].Key, LowLeft, new Vector2(cap[i], capHeight), new Vector2(x, 0f),
+                    Alpha(Base2, 0.95f), InkSoft);
+                x += cap[i];
+
+                if (note[i] > 0f)
+                {
+                    x += join;
+                    Label(Box(row, "Note" + i, LowLeft, new Vector2(note[i] + 8f, capHeight), new Vector2(x, 0f)),
+                        keys[i].Note, UiFont.UiBold, T_Micro, InkFaint, TextAlignmentOptions.Left, K_Label);
+                    x += note[i];
+                }
+
+                x += space;
+            }
+
+            return row;
+        }
+
+        /// <summary>
+        /// A track, its fill and the light at the end of it. The fill is a left pinned box whose width
+        /// is written every frame, so the gauge cannot report a number it is not showing.
+        /// </summary>
+        static MeterBar Meter(Transform parent, string name, Vector2 anchor, Vector2 size, Vector2 position,
+            MeterBar.ColorStop[] ramp, Color groove, TMP_Text readout = null, float inset = 3f,
+            float smoothing = 9f, float warnThreshold = 0.28f, bool tipGlow = true)
+        {
+            RectTransform track = Box(parent, name, anchor, size, position);
+            Surface(Inset(track, "Groove", Vector2.zero, Vector2.zero), UiShape.PillS, groove);
+            Surface(Inset(track, "Edge", Vector2.zero, Vector2.zero), UiShape.OutlineS, Alpha(Cyan, 0.26f));
+
+            RectTransform fill = Box(track, "Fill", MidLeft, new Vector2(inset, size.y - inset * 2f),
+                new Vector2(inset, 0f));
+            Image fillImage = Surface(fill, UiShape.PillS, ramp[ramp.Length - 1].color);
+
+            // The leading edge of the tank, not a glow. A soft dot floating off the end of a gauge reads
+            // as a light source rather than as a quantity, and it is the only element on the HUD that
+            // reports nothing. Pivot (1, 0.5) hangs it backwards from the end, so it sits inside the
+            // pill's own curve instead of cutting it square.
+            RectTransform tip = null;
+
+            if (tipGlow)
+            {
+                float capHeight = Mathf.Max(4f, size.y - inset * 2f - 10f);
+                tip = Box(track, "Tip", MidLeft, new Vector2(6f, capHeight), new Vector2(inset, 0f));
+                tip.pivot = new Vector2(1f, 0.5f);
+                Surface(tip, UiShape.Quad, Alpha(Lift(ramp[ramp.Length - 1].color), 0.9f));
+            }
+
+            if (warnThreshold > 0f)
+            {
+                Surface(Box(track, "WarnTick", MidLeft, new Vector2(2f, size.y - inset * 2f),
+                    new Vector2(inset + (size.x - inset * 2f) * warnThreshold, 0f)), UiShape.Quad,
+                    Alpha(Ink, 0.22f));
+            }
+
+            MeterBar meter = fill.gameObject.AddComponent<MeterBar>();
+            meter.Wire(track, fill, fillImage, tip, readout, ramp, inset, smoothing, warnThreshold);
+            return meter;
+        }
+
+        /// <summary>The chip that says a score has just become the best. It breathes; nothing else does.</summary>
+        static RectTransform RecordChip(Transform parent, string name, string caption, Vector2 anchor, Vector2 size,
+            Vector2 position)
+        {
+            RectTransform rect = Step(parent, name, anchor, size, position);
+            Image halo = Surface(Halo(rect, "Glow", size), UiShape.Bloom, Alpha(Magenta, 0.24f));
+            Surface(Inset(rect, "Back", Vector2.zero, Vector2.zero), PillFor(size.y), Magenta);
+            TMP_Text label = Label(Inset(rect, "Label", Vector2.zero, Vector2.zero), caption, UiFont.UiBold,
+                T_Btn_S, InkOnMag, TextAlignmentOptions.Center, K_Label);
+
+            halo.gameObject.AddComponent<NeonPulse>().Wire(seconds: 1.2f, alphaDepth: 0.45f, scaleDepth: 0.08f);
+            label.gameObject.AddComponent<NeonPulse>().Wire(seconds: 1.2f, alphaDepth: 0.12f, scaleDepth: 0f);
+
+            return rect;
+        }
+
+        /// <summary>
+        /// Gives a screen its motion. Without this a screen still works, it just appears, which is what
+        /// made the old menus feel like a still image rather than part of the game.
+        /// </summary>
+        static void PanelFx(RectTransform root, RectTransform steps)
+        {
+            root.gameObject.AddComponent<CanvasGroup>();
+            root.gameObject.AddComponent<PanelTransition>().Wire(steps);
+        }
+
+        static void Scrim(Transform root, Color color)
+        {
+            Surface(Node(root, "Scrim"), UiShape.Quad, color);
+        }
+
+        /// <summary>The capsule family is chosen by the height it has to round.</summary>
+        static UiShape PillFor(float height) =>
+            height >= 80f ? UiShape.PillL : height >= 56f ? UiShape.PillM : UiShape.PillS;
+
+        /// <summary>A palette entry at a different alpha; nearly every surface here is one.</summary>
+        static Color Alpha(Color color, float a)
+        {
+            Color copy = color;
+            copy.a = a;
+            return copy;
+        }
+
+        /// <summary>The same hue, cleared of its own dark cast, for a tinted white sprite.</summary>
+        static Color Lift(Color color) => new(Mathf.Max(color.r, 0.45f), Mathf.Max(color.g, 0.45f),
+            Mathf.Max(color.b, 0.45f), color.a);
+
+        static MeterBar.ColorStop[] Ramp(params (float At, Color Color)[] stops)
+        {
+            MeterBar.ColorStop[] ramp = new MeterBar.ColorStop[stops.Length];
+
+            for (int i = 0; i < stops.Length; i++)
+            {
+                ramp[i] = new MeterBar.ColorStop { at = stops[i].At, color = stops[i].Color };
+            }
+
+            return ramp;
         }
     }
 }

@@ -31,11 +31,6 @@ namespace HW2
             base.Awake();
 
             settings = GameSettings.Instance;
-            GameManager gm = GameManager.Instance;
-            if (gm != null)
-            {
-                gm.RunStarted += BuildRoad;
-            }
         }
 
         protected override void OnDestroy()
@@ -49,8 +44,15 @@ namespace HW2
             }
         }
 
+        /// <summary>
+        /// Subscribed from Start, not Awake. A singleton's Instance is only assigned by its own Awake, so
+        /// reading it from another Awake can legitimately return null, and a silently skipped subscription
+        /// here means the road is never rebuilt: no fuel cans within reach of a second run, ever.
+        /// </summary>
         void Start()
         {
+            GameManager.Instance.RunStarted += BuildRoad;
+
             BuildRoad();
         }
 

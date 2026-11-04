@@ -6,8 +6,12 @@ using UnityEngine.UI;
 namespace HW2
 {
     /// <summary>
-    /// Main menu, pause menu, game over screen and the in-game HUD (speed, fuel bar, lives,
-    /// score, high score). Panels are resolved by path and driven purely by GameManager events.
+    /// Main menu, pause menu, game over screen and the in-game HUD (speed, fuel, lives, score, high
+    /// score). Panels are resolved by path and driven purely by GameManager events.
+    ///
+    /// This class dispatches facts and never eases: it tells a meter what fraction to show and a screen
+    /// to appear, and the components it names own the motion. That division is what keeps a tween alive
+    /// while the panel it is writing to is on its way off the frame.
     /// </summary>
     public sealed class UIManager : MonoBehaviour
     {
@@ -21,31 +25,33 @@ namespace HW2
         [SerializeField] string speedPath = "HUD/SpeedPanel/SpeedValue";
         [SerializeField] string scorePath = "HUD/ScorePanel/ScoreValue";
         [SerializeField] string bestPath = "HUD/ScorePanel/BestValue";
-        [SerializeField] string fuelFillPath = "HUD/FuelPanel/Track/Fill";
+        [SerializeField] string speedBarPath = "HUD/SpeedPanel/SpeedBar/Fill";
+        [SerializeField] string fuelMeterPath = "HUD/FuelPanel/Track/Fill";
         [SerializeField] string livesPath = "HUD/LifePanel/Lives";
         [SerializeField] string damageFlashPath = "HUD/DamageFlash";
 
         [Header("Menu")]
-        [SerializeField] string menuBestPath = "Menu/Panel/BestValue";
-        [SerializeField] string startButtonPath = "Menu/Panel/StartButton";
-        [SerializeField] string quitButtonPath = "Menu/Panel/QuitButton";
+        [SerializeField] string menuBestPath = "Menu/BestChip/BestValueBlock/BestValue";
+        [SerializeField] string startButtonPath = "Menu/StartButton";
+        [SerializeField] string quitButtonPath = "Menu/QuitButton";
 
         [Header("Pause")]
         [SerializeField] string resumeButtonPath = "Pause/Panel/ResumeButton";
         [SerializeField] string pauseRestartButtonPath = "Pause/Panel/RestartButton";
         [SerializeField] string pauseMenuButtonPath = "Pause/Panel/MenuButton";
+        [SerializeField] string pauseScorePath = "Pause/Panel/Stakes/ScoreValueBlock/ScoreValue";
+        [SerializeField] string pauseBestPath = "Pause/Panel/Stakes/BestValueBlock/BestValue";
 
         [Header("Game over")]
-        [SerializeField] string overScorePath = "GameOver/Panel/ScoreValue";
-        [SerializeField] string overBestPath = "GameOver/Panel/BestValue";
+        [SerializeField] string overScorePath = "GameOver/Panel/Result/ScoreValueBlock/ScoreValue";
+        [SerializeField] string overBestPath = "GameOver/Panel/Result/BestValueBlock/BestValue";
         [SerializeField] string overReasonPath = "GameOver/Panel/ReasonValue";
-        [SerializeField] string overRecordPath = "GameOver/Panel/NewRecord";
+        [SerializeField] string overRecordPath = "GameOver/Panel/RecordChip";
         [SerializeField] string overRestartButtonPath = "GameOver/Panel/RestartButton";
         [SerializeField] string overMenuButtonPath = "GameOver/Panel/MenuButton";
 
-        [SerializeField] Color damageFlashColor = new Color(1f, 0.2f, 0.16f, 1f);
-        [SerializeField] Color lowFuelColor = new Color(0.95f, 0.28f, 0.2f, 1f);
-        [SerializeField] Color highFuelColor = new Color(0.25f, 0.95f, 0.65f, 1f);
+        [Tooltip("How hard a hit lights the screen. The rate it fades at lives on the flash itself.")]
+        [SerializeField] float damageImpulse = 0.55f;
 
         GameObject hud;
         GameObject menu;
@@ -53,17 +59,21 @@ namespace HW2
         GameObject gameOver;
 
         TMP_Text speedText;
-        TMP_Text scoreText;
         TMP_Text bestText;
         TMP_Text menuBestText;
-        TMP_Text overScoreText;
+        TMP_Text pauseScoreText;
+        TMP_Text pauseBestText;
         TMP_Text overBestText;
         TMP_Text overReasonText;
-        TMP_Text overRecordText;
 
-        Image fuelFill;
-        Image damageFlash;
-        Transform livesRoot;
+        ReadoutText scoreReadout;
+        ReadoutText overScoreReadout;
+
+        MeterBar speedBar;
+        MeterBar fuelMeter;
+        HeartMeter lives;
+        ScreenFlash damageFlash;
+        GameObject overRecord;
 
         Button startButton;
         Button quitButton;
@@ -73,7 +83,7 @@ namespace HW2
         Button overRestartButton;
         Button overMenuButton;
 
-        float damageFlashAmount;
+        int writtenScore = -1;
 
         // The panel's default button, re-asserted until the EventSystem accepts a selection.
         GameObject defaultSelection;
@@ -84,14 +94,18 @@ namespace HW2
             ResolveWidgets();
             BindButtons();
 
+            // Every screen is built active so that all four are visible in the editor. They go off before
+            // the first state is applied, otherwise the scene opens with three screens fading out at once.
+            HideAll();
+
             GameManager gm = GameManager.Instance;
             if (gm != null)
             {
                 gm.StateChanged += ApplyState;
                 gm.LivesChanged += _ => RefreshHud();
                 gm.FuelChanged += _ => RefreshHud();
-                gm.PlayerHit += _ => damageFlashAmount = 0.55f;
-                gm.RunStarted += () => damageFlashAmount = 0f;
+                gm.PlayerHit += _ => damageFlash?.Punch(damageImpulse);
+                gm.RunStarted += HandleRunStarted;
                 ApplyState(gm.State);
             }
 
@@ -111,6 +125,7 @@ namespace HW2
             if (gm != null)
             {
                 gm.StateChanged -= ApplyState;
+                gm.RunStarted -= HandleRunStarted;
             }
 
             InputManager input = InputManager.Instance;
@@ -134,18 +149,6 @@ namespace HW2
                 RefreshHud();
             }
 
-            if (damageFlashAmount > 0f)
-            {
-                damageFlashAmount = Mathf.Max(0f, damageFlashAmount - Time.unscaledDeltaTime * 1.6f);
-            }
-
-            if (damageFlash != null)
-            {
-                Color flash = damageFlashColor;
-                flash.a = damageFlashAmount;
-                damageFlash.color = flash;
-            }
-
             EnsureSelection();
         }
 
@@ -166,6 +169,17 @@ namespace HW2
             {
                 system.SetSelectedGameObject(defaultSelection);
             }
+        }
+
+        /// <summary>
+        /// A new run starts clean. The flash is cut rather than left to decay, and the score is snapped
+        /// rather than rolled, so the first point of this run is not counted up from the last one.
+        /// </summary>
+        void HandleRunStarted()
+        {
+            damageFlash?.Clear();
+            writtenScore = -1;
+            RefreshHud();
         }
 
         void HandlePause()
@@ -206,17 +220,22 @@ namespace HW2
         void ResolveWidgets()
         {
             speedText = FindText(speedPath);
-            scoreText = FindText(scorePath);
             bestText = FindText(bestPath);
             menuBestText = FindText(menuBestPath);
-            overScoreText = FindText(overScorePath);
+            pauseScoreText = FindText(pauseScorePath);
+            pauseBestText = FindText(pauseBestPath);
             overBestText = FindText(overBestPath);
             overReasonText = FindText(overReasonPath);
-            overRecordText = FindText(overRecordPath);
 
-            fuelFill = FindComponent<Image>(fuelFillPath);
-            damageFlash = FindComponent<Image>(damageFlashPath);
-            livesRoot = transform.Find(livesPath);
+            scoreReadout = FindComponent<ReadoutText>(scorePath);
+            overScoreReadout = FindComponent<ReadoutText>(overScorePath);
+
+            speedBar = FindComponent<MeterBar>(speedBarPath);
+            fuelMeter = FindComponent<MeterBar>(fuelMeterPath);
+            lives = FindComponent<HeartMeter>(livesPath);
+            damageFlash = FindComponent<ScreenFlash>(damageFlashPath);
+
+            overRecord = FindObject(overRecordPath);
 
             startButton = FindComponent<Button>(startButtonPath);
             quitButton = FindComponent<Button>(quitButtonPath);
@@ -248,10 +267,12 @@ namespace HW2
 
         void ApplyState(GameState state)
         {
-            SetActive(hud, state != GameState.Menu);
-            SetActive(menu, state == GameState.Menu);
-            SetActive(pause, state == GameState.Paused);
-            SetActive(gameOver, state == GameState.GameOver);
+            // The readouts go away with the run, not just with the menu. A pause card that quotes the
+            // score next to a live score readout is two numbers arguing about the same thing.
+            Show(hud, state == GameState.Playing);
+            Show(menu, state == GameState.Menu);
+            Show(pause, state == GameState.Paused);
+            Show(gameOver, state == GameState.GameOver);
 
             switch (state)
             {
@@ -259,7 +280,7 @@ namespace HW2
                     Select(startButton != null ? startButton.gameObject : null);
                     if (menuBestText != null)
                     {
-                        menuBestText.text = $"Best  {GameManager.Instance.HighScore}";
+                        menuBestText.text = GameManager.Instance.HighScore.ToString("N0");
                     }
 
                     break;
@@ -268,6 +289,7 @@ namespace HW2
                     break;
                 case GameState.Paused:
                     Select(resumeButton != null ? resumeButton.gameObject : null);
+                    RefreshStakes();
                     break;
                 case GameState.GameOver:
                     Select(overRestartButton != null ? overRestartButton.gameObject : null);
@@ -278,18 +300,23 @@ namespace HW2
             RefreshHud();
         }
 
+        /// <summary>
+        /// The score of a run that just ended is worth counting up, which is why it is written here and
+        /// not in <c>RefreshHud</c>: that one runs every frame and would cut the roll short.
+        /// </summary>
         void ShowGameOver()
         {
             GameManager gm = GameManager.Instance;
 
-            if (overScoreText != null)
+            if (overScoreReadout != null)
             {
-                overScoreText.text = $"Score  {gm.Score}";
+                overScoreReadout.SetValue(0f);
+                overScoreReadout.RollTo(gm.Score);
             }
 
             if (overBestText != null)
             {
-                overBestText.text = $"Best  {gm.HighScore}";
+                overBestText.text = gm.HighScore.ToString("N0");
             }
 
             if (overReasonText != null)
@@ -299,9 +326,29 @@ namespace HW2
                     : "The car is wrecked.";
             }
 
-            if (overRecordText != null)
+            if (overRecord != null)
             {
-                overRecordText.gameObject.SetActive(gm.NewRecord);
+                overRecord.SetActive(gm.NewRecord);
+            }
+        }
+
+        /// <summary>What a paused player is playing for, read out on the pause card.</summary>
+        void RefreshStakes()
+        {
+            GameManager gm = GameManager.Instance;
+            if (gm == null)
+            {
+                return;
+            }
+
+            if (pauseScoreText != null)
+            {
+                pauseScoreText.text = gm.Score.ToString("N0");
+            }
+
+            if (pauseBestText != null)
+            {
+                pauseBestText.text = gm.HighScore.ToString("N0");
             }
         }
 
@@ -318,9 +365,17 @@ namespace HW2
                 speedText.text = Mathf.RoundToInt(gm.Speed * 3.6f).ToString();
             }
 
-            if (scoreText != null)
+            if (speedBar != null)
             {
-                scoreText.text = gm.Score.ToString("N0");
+                speedBar.SetTarget(gm.Speed01);
+            }
+
+            // Only on a change: the readout owns its own motion, and being told the same number every
+            // frame would leave it nothing to roll between.
+            if (scoreReadout != null && gm.Score != writtenScore)
+            {
+                writtenScore = gm.Score;
+                scoreReadout.SetValue(writtenScore);
             }
 
             if (bestText != null)
@@ -328,18 +383,14 @@ namespace HW2
                 bestText.text = $"Best {gm.HighScore:N0}";
             }
 
-            if (fuelFill != null)
+            if (fuelMeter != null)
             {
-                fuelFill.fillAmount = gm.Fuel01;
-                fuelFill.color = Color.Lerp(lowFuelColor, highFuelColor, gm.Fuel01);
+                fuelMeter.SetTarget(gm.Fuel01);
             }
 
-            if (livesRoot != null)
+            if (lives != null)
             {
-                for (int i = 0; i < livesRoot.childCount; i++)
-                {
-                    livesRoot.GetChild(i).gameObject.SetActive(i < gm.Lives);
-                }
+                lives.SetLives(gm.Lives);
             }
         }
 
@@ -390,13 +441,48 @@ namespace HW2
             system.SetSelectedGameObject(target);
         }
 
-        static void SetActive(GameObject go, bool value)
+        void HideAll()
         {
-            if (go != null)
+            StartHidden(hud);
+            StartHidden(menu);
+            StartHidden(pause);
+            StartHidden(gameOver);
+        }
+
+        /// <summary>
+        /// A screen arrives through its transition, or simply switches if the scene was built without
+        /// one: the HUD still works, it just has nothing to animate.
+        /// </summary>
+        static void Show(GameObject panel, bool value)
+        {
+            PanelTransition fx = Transition(panel);
+
+            if (fx != null)
             {
-                go.SetActive(value);
+                fx.SetVisible(value);
+            }
+            else if (panel != null)
+            {
+                panel.SetActive(value);
             }
         }
+
+        static void StartHidden(GameObject panel)
+        {
+            PanelTransition fx = Transition(panel);
+
+            if (fx != null)
+            {
+                fx.StartHidden();
+            }
+            else if (panel != null)
+            {
+                panel.SetActive(false);
+            }
+        }
+
+        static PanelTransition Transition(GameObject panel) =>
+            panel != null ? panel.GetComponent<PanelTransition>() : null;
 
         GameObject FindObject(string path)
         {
